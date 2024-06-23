@@ -1,2 +1,0 @@
-# edukai
-Edukai Remote Internship

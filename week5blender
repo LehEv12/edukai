@@ -1,0 +1,592 @@
+# OSM Query (updated)
+
+	import requests
+	def query_monument(monument):
+	    # URL you are posting to
+	    url = "https://overpass-api.de/api/interpreter"
+	
+	    # Initial query to be sent to the API
+	    query1 = f"""
+	    [out:json];
+	
+	    // Define the search area as Rome
+	    area["name"="Italia"]->.searchArea;
+	
+	    // Search for the structure/monument by its name in English as a monument and an archaeological site
+	    (
+	    node(area.searchArea)["historic"="monument"]["name:en"="{monument}"];
+	    way(area.searchArea)["historic"="monument"]["name:en"="{monument}"];
+	    relation(area.searchArea)["historic"="monument"]["name:en"="{monument}"];
+	
+	    node(area.searchArea)["historic"="archaeological_site"]["name:en"="{monument}"];
+	    way(area.searchArea)["historic"="archaeological_site"]["name:en"="{monument}"];
+	    relation(area.searchArea)["historic"="archaeological_site"]["name:en"="{monument}"];
+	
+	    node(area.searchArea)["historic"="monument"]["name:it"="{monument}"];
+	    way(area.searchArea)["historic"="monument"]["name:it"="{monument}"];
+	    relation(area.searchArea)["historic"="monument"]["name:it"="{monument}"];
+	
+	    node(area.searchArea)["historic"="archaeological_site"]["name:it"="{monument}"];
+	    way(area.searchArea)["historic"="archaeological_site"]["name:it"="{monument}"];
+	    relation(area.searchArea)["historic"="archaeological_site"]["name:it"="{monument}"];
+	    );
+	
+	    out center;
+	    """
+	
+	    # Fallback query to be sent to the API; if certain structures or monuments are not labeled as historic monuments of sites in OSM, search for it as a tourist attraction
+	    query2 = f"""
+	    [out:json];
+	
+	    // Define the search area as Rome
+	    area["name"="Italia"]->.searchArea;
+	
+	    // Search for the monument by its name as a tourist attraction
+	    (
+	    node(area.searchArea)["tourism"]["name:en"="{monument}"];
+	    way(area.searchArea)["tourism"]["name:en"="{monument}"];
+	    relation(area.searchArea)["tourism"]["name:en"="{monument}"];
+	
+	    node(area.searchArea)["tourism"]["name:it"="{monument}"];
+	    way(area.searchArea)["tourism"]["name:it"="{monument}"];
+	    relation(area.searchArea)["tourism"]["name:it"="{monument}"];
+	    );
+	    (._;>;);
+	    out center;
+	    """
+	
+	    def send_query(query):
+	        print("Sending query...")
+	        data = {'data': query}
+	        response = requests.post(url, data=data)
+	        print("Status code:", response.status_code)
+	        
+	        if response.status_code == 200:
+	            try:
+	                json_response = response.json()
+	                with open(f'{monument}.json', 'w', encoding='utf-8') as f:
+	                    f.write(response.text)
+	                print(f"JSON response saved successfully as {monument}.json")
+	                
+	                return json_response
+	            except requests.exceptions.JSONDecodeError as e:
+	                print("Failed to decode JSON response:", e)
+	                return None
+	        else:
+	            print("Error occurred:", response.status_code)
+	            return None
+	
+	    # Try the first query
+	    print("Trying first query...")
+	    json_response = send_query(query1)
+	    
+	    # Initialize variables to store coordinates and id
+	    longitude = None
+	    latitude = None
+	    monument_id = None
+	
+	    # Check if the first query succeeded in getting coordinates
+	    if json_response and 'elements' in json_response and json_response['elements']:
+	        for element in json_response['elements']:
+	            monument_id = element.get('id')
+	            if 'center' in element:
+	                coordinates = element['center']
+	                longitude = coordinates.get('lon')
+	                latitude = coordinates.get('lat')
+	                break
+	    
+	    # If the first query did not succeed, try the second query
+	    if not longitude or not latitude:
+	        print("First query failed, trying second query...")
+	        json_response = send_query(query2)
+	        if json_response and 'elements' in json_response:
+	            for element in json_response['elements']:
+	                if element['type'] == 'node' and 'lat' in element and 'lon' in element:
+	                    latitude = element['lat']
+	                    longitude = element['lon']
+	                    monument_id = element.get('id')
+	                    break
+	    
+	    if longitude and latitude:
+	        message = f"{monument} found! ID: {monument_id}, Latitude: {latitude}, Longitude: {longitude}"
+	    else:
+	        message = f"{monument} not found. Try another monument or structure."
+	    
+	    print(message)
+	    return latitude, longitude, monument_id, message
+
+Notes: 
+* Updated to run 2 queries if first query fails, some monuments/structures don't appear listed under historical monuments or structures so you have to search for them as tourist attractions
+* Returns the relation ID of the monument
+* Added both "it" and "en" that will search for the monument based on whether you enter the english name or italian name
+
+# GE Screenshots
+
+	from selenium import webdriver
+	from selenium.webdriver.firefox.service import Service
+	from webdriver_manager.firefox import GeckoDriverManager
+	from selenium.webdriver.firefox.options import Options
+	import time
+	import os
+	
+	
+	def take_pictures(latitude, longitude, altitude, heading, pitch, tilt, roll):
+	    # Path to the Firefox profile
+	    profile_path = 'C:\\Users\\evanl\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\198ghikw.Earth'
+	
+	    # Configure GeckoDriver service
+	    service = Service(GeckoDriverManager().install())
+	
+	    # Configure Firefox options to use the specified profile
+	    options = Options()
+	    options.profile = profile_path
+	
+	    # Start Firefox browser with the specified options
+	    driver = webdriver.Firefox(service=service, options=options)
+	
+	    # List of 'h' parameter values
+	    h_values = ['0', '60', '120', '180', '240', '300']
+	
+	    # Base URL without the 'h' parameter
+	    base_url = f"https://earth.google.com/web/@{latitude},{longitude},{altitude}a,{heading}d,{pitch}y,{{h}}h,{tilt}t,{roll}r/data=OgMKATA"
+	
+	    for h in h_values:
+	        # Create the complete URL with the current value of the 'h' parameter
+	        url = base_url.format(h=h)
+	
+	        # Open the web page
+	        driver.get(url)
+	
+	        # Wait for the page to fully load
+	        time.sleep(20)
+
+Notes:
+* Have to change altitude and heading to adjust zoom and height of camera
+* Could figure out how to make that automatic based on the size of the object at the coordinates, could not figure it out myself
+* Size of monument on screen and area around it set the center and size of base monument in Blender (examples in Test Cases)
+
+# Convert PNG screenshots to JPG
+
+	import os
+	from PIL import Image
+	import zipfile
+	
+	def convert_png_to_jpg(folder_path):
+	    # Get all PNG files in the folder
+	    png_files = [f for f in os.listdir(folder_path) if f.endswith('.png')]
+	    
+	    for png_file in png_files:
+	        # Full path of the PNG file
+	        png_path = os.path.join(folder_path, png_file)
+	        # Full path of the JPG file
+	        jpg_path = os.path.join(folder_path, png_file.replace('.png', '.jpg'))
+	        
+	        # Open the PNG image and convert it to JPG
+	        img = Image.open(png_path)
+	        img.convert('RGB').save(jpg_path, 'JPEG')
+	        
+	        # Print conversion message
+	        print(f"Converted {png_file} to {os.path.basename(jpg_path)}")
+	        
+	        # Delete the original PNG file
+	        os.remove(png_path)
+	        print(f"Deleted {png_file}")
+	
+	def add_jpgs_to_zip(folder_path, zip_file_name):
+	    with zipfile.ZipFile(zip_file_name, 'w') as zipf:
+	        # Get all JPG files in the folder
+	        jpg_files = [f for f in os.listdir(folder_path) if f.endswith('.jpg')]
+	        
+	        for jpg_file in jpg_files:
+	            # Full path of the JPG file
+	            jpg_path = os.path.join(folder_path, jpg_file)
+	            # Add the JPG file to the ZIP archive
+	            zipf.write(jpg_path, jpg_file)
+	            
+	            # Print zip addition message
+	            print(f"Added {jpg_file} to {zip_file_name}")
+	        
+	    print("Completed.")
+	
+	        # Take a screenshot and save the image with a name reflecting the value of the 'h' parameter
+	        screenshot_path = f'screenshot_{h}.png'
+	        driver.save_screenshot(screenshot_path)
+	        print(f"Screenshot saved in {screenshot_path}")
+	
+	    # Close the browser
+	    driver.quit()
+
+# HF Endpoint
+
+	import requests
+	import os
+	
+	def send_request(glb_file_path):
+	    print("Sending request to HuggingFace endpoint")
+	    url = "https://andreagalle-dust3r-server.hf.space/upload_zip/"
+	    output_file_path = "./model.glb"
+	
+	    # Load the file
+	    files = {'file': open(glb_file_path, 'rb')}
+	
+	    # Send the POST request
+	    response = requests.post(url, files=files)
+	
+	    # Save the response to the output file
+	    if response.status_code == 200:
+	        with open(output_file_path, 'wb') as f:
+	            f.write(response.content)
+	        print("File saved!")
+	    else:
+	        print(f"Error during file loading: {response.status_code}")
+
+# Import GLB to Blender
+
+	import subprocess
+	import os
+	import shutil
+	
+	def import_glb_to_blender(glb_file_path):
+	    # Ensure the GLB file exists
+	    if os.path.exists(glb_file_path):
+	        # Path to Blender executable
+	        blender_executable = "C:\\Program Files\\Blender Foundation\\Blender 4.1\\blender.exe"  # Update this path
+	
+	        # Blender script to import the GLB file and save as Blender file
+	        blender_script = f"""
+	import bpy
+	
+	# Delete default scene objects
+	bpy.ops.object.select_all(action='DESELECT')
+	bpy.ops.object.select_by_type(type='MESH')
+	bpy.ops.object.delete()
+	
+	# Import GLB file (escape backslashes in file path)
+	bpy.ops.import_scene.gltf(filepath="{glb_file_path.replace('\\', '\\\\')}")
+	
+	# Save as Blender file
+	bpy.ops.wm.save_as_mainfile(filepath="./imported_model.blend")
+	"""
+	
+	        # Save the Blender script to a temporary file
+	        blender_script_path = "./import_glb_to_blender.py"
+	        with open(blender_script_path, 'w') as script_file:
+	            script_file.write(blender_script)
+	
+	        # Call Blender with the script
+	        try:
+	            subprocess.run([blender_executable, "--background", "--python", blender_script_path], check=True)
+	        except subprocess.CalledProcessError as e:
+	            print(f"Blender script execution failed: {e}")
+	            return
+	
+	        # Remove the temporary Blender script
+	        os.remove(blender_script_path)
+	
+	        # Move the saved Blender file to a specific location if desired
+	        saved_blend_file_path = "./imported_model.blend"
+	        destination_path = "C:\\Users\\evanl\\Blender\\imported_model.blend"  # Update this path
+	        if os.path.exists(saved_blend_file_path):
+	            shutil.move(saved_blend_file_path, destination_path)
+	            print(f"Blender file saved to: {destination_path}")
+	        else:
+	            print(f"Blender file not found: {saved_blend_file_path}")
+	
+	    else:
+	        print(f"GLB file not found: {glb_file_path}")
+
+# Center Model in Blender
+	import subprocess
+	import os
+	
+	def centered_model(blend_file_path):
+	    # Ensure the Blender file exists
+	    if os.path.exists(blend_file_path):
+	        # Path to Blender executable
+	        blender_executable = "C:\\Program Files\\Blender Foundation\\Blender 4.1\\blender.exe"  # Update this path
+	
+	        # Blender script to center the largest object, scale it, and save the file
+	        blender_script = f"""
+	import bpy
+	import os
+	import mathutils
+	
+	# Load the specified Blender file
+	bpy.ops.wm.open_mainfile(filepath=r"{blend_file_path}")
+	
+	# Deselect all objects first
+	bpy.ops.object.select_all(action='DESELECT')
+	
+	# Get all visible objects in the current view layer
+	visible_objects = bpy.context.visible_objects
+	
+	# Find the object with the largest bounding box volume
+	largest_object = None
+	max_volume = 0.0
+	
+	for obj in visible_objects:
+	    # Calculate bounding box volume (approximation using dimensions)
+	    bounding_volume = obj.dimensions.x * obj.dimensions.y * obj.dimensions.z
+	    
+	    # Check if current object has larger volume
+	    if bounding_volume > max_volume:
+	        max_volume = bounding_volume
+	        largest_object = obj
+	
+	# Select only the largest object
+	if largest_object:
+	    bpy.context.view_layer.objects.active = largest_object
+	    largest_object.select_set(True)
+	    bpy.ops.object.select_all(action='DESELECT')
+	    largest_object.select_set(True)
+	
+	    # Delete all other objects except the largest one
+	    objects_to_delete = [obj for obj in visible_objects if obj != largest_object]
+	    for obj in objects_to_delete:
+	        bpy.data.objects.remove(obj, do_unlink=True)
+	
+	    # Move the largest object to the origin
+	    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+	    bpy.ops.object.location_clear(clear_delta=False)
+	    
+	    # Scale the largest object by 25 times
+	    largest_object.scale = (25, 25, 25)
+	
+	# Function to get the visual center of the object
+	def get_visual_center(obj):
+	    # Get the evaluated object to consider modifiers
+	    depsgraph = bpy.context.evaluated_depsgraph_get()
+	    evaluated_object = obj.evaluated_get(depsgraph)
+	    
+	    # Get the mesh data
+	    mesh = evaluated_object.data
+	    
+	    # Calculate the visual center based on the vertices
+	    vertices = [evaluated_object.matrix_world @ v.co for v in mesh.vertices]
+	    if vertices:
+	        bbox_center = sum(vertices, mathutils.Vector()) / len(vertices)
+	    else:
+	        bbox_center = mathutils.Vector()
+	    
+	    return bbox_center
+	
+	# Clear selection
+	bpy.ops.object.select_all(action='DESELECT')
+	
+	# Get the active object (selected object in 3D Viewport)
+	selected_obj = bpy.context.active_object
+	
+	# Check if there is a selected object
+	if selected_obj:
+	    # Select the object
+	    selected_obj.select_set(True)
+	    bpy.context.view_layer.objects.active = selected_obj
+	    
+	    # Get the visual center of the object
+	    visual_center = get_visual_center(selected_obj)
+	    
+	    # Calculate the offset to move the object to the scene's origin
+	    offset = mathutils.Vector((0, 0, 0)) - visual_center
+	    
+	    # Move the object to center its solid display in the viewport
+	    selected_obj.location += offset
+	    
+	    print("Object centered in the viewport based on its visual display.")
+	
+	# Iterate through all selected objects in the current view layer
+	for obj in bpy.context.selected_objects:
+	    # Set the object as the active object
+	    bpy.context.view_layer.objects.active = obj
+	    
+	    # Set the rotation mode to Euler
+	    obj.rotation_mode = 'XYZ'  # Set to whatever Euler rotation mode is desired
+	    
+	    # Set the desired rotation
+	    obj.rotation_euler = (-0.5348469, -3.1277516, -0.008628798)
+	
+	# Save the modified Blender file as centered_model.blend
+	save_path = os.path.join(os.path.dirname(r"{blend_file_path}"), "centered_model.blend")
+	bpy.ops.wm.save_as_mainfile(filepath=save_path)
+	"""
+	
+	        # Save the Blender script to a temporary file
+	        blender_script_path = "./centered_model.py"
+	        with open(blender_script_path, 'w') as script_file:
+	            script_file.write(blender_script)
+	
+	        # Call Blender with the script
+	        try:
+	            subprocess.run([blender_executable, "--background", "--python", blender_script_path], check=True)
+	        except subprocess.CalledProcessError as e:
+	            print(f"Blender script execution failed: {e}")
+	            return
+	
+	        # Remove the temporary Blender script
+	        os.remove(blender_script_path)
+	
+	        print(f"Blender file edited, scaled, and saved as centered_model.blend")
+	
+	    else:
+	        print(f"Blender file not found: {blend_file_path}")
+
+Notes:
+* Blender runs separately, only way to navigate it through VSCode or another similar program, you have to send a Python query to Blender once opened
+* The model will always be bigger than the screenshots, so selecting the largest object (the model) allows for deletion of the screenshot pictures
+* Model imports on an angle, the angle it is at off importing is set at base coordinates of 0, so to center it I had to rotate it using numbers. I tried rotating it and centering it based on general code without number (recognizing the object is at an angle and rotate it to flatten and center it), but could not figure it out. After running some tests, every model is imported at the same angle so the numbers accurately center it
+* Visual center of the object is the center of only the selected object, not using a bounding box or anything. Centers the model at the origin based on the center of the object's mass. I could not figure out how to specifically center about the relation of the monument, so the centering of the model in Blender is based on the angles and centering of the screenshots in Google Earth
+* Could maybe write code that will create a circle connecting the tallest points on the object, then center the origin of the circle with the origin of the axes (mathematical/geometrical approach)
+
+# Trim Model
+	import subprocess
+	import os
+	
+	def trim_model(centered_path):
+	    if os.path.exists(centered_path):
+	        # Path to Blender executable
+	        blender_executable = "C:\\Program Files\\Blender Foundation\\Blender 4.1\\blender.exe"  # Update this path
+	
+	        # Blender script to center the largest object, scale it, and save the file
+	        blender_script = f"""
+	import bpy
+	import os
+	import bmesh
+	import math
+	
+	# Load the specified Blender file
+	bpy.ops.wm.open_mainfile(filepath=r"{centered_path}")
+	
+	# Get the selected object
+	selected_obj = bpy.context.object
+	
+	# Ensure we have an object selected
+	if selected_obj:
+	    # Set the Z location to 0
+	    selected_obj.location.z = 0.0
+	
+	
+	# Define the size of the region around the origin (adjust as needed)
+	region_size = 4  # This will create a region of +/- 4 units around the origin
+	
+	# Calculate region boundaries
+	region_min = (-region_size, -region_size, -region_size)
+	region_max = (region_size, region_size, region_size)
+	
+	# Delete vertices outside the specified region
+	def delete_vertices_outside_region(region_min, region_max):
+	    # Iterate through all mesh objects in the scene
+	    for obj in bpy.context.scene.objects:
+	        if obj.type == 'MESH':
+	            # Ensure the object is in edit mode to modify mesh data
+	            bpy.context.view_layer.objects.active = obj
+	            bpy.ops.object.mode_set(mode='EDIT')
+	            
+	            # Get the mesh data
+	            mesh = bmesh.from_edit_mesh(obj.data)
+	            
+	            # List to store vertices that need to be removed
+	            vertices_to_remove = []
+	            
+	            # Iterate through vertices and mark those outside the region for removal
+	            for vert in mesh.verts:
+	                vert_co = obj.matrix_world @ vert.co  # Global coordinates of the vertex
+	                
+	                # Check if the vertex is outside the defined region
+	                if not (region_min[0] <= vert_co.x <= region_max[0] and
+	                        region_min[1] <= vert_co.y <= region_max[1] and
+	                        region_min[2] <= vert_co.z <= region_max[2]):
+	                    vertices_to_remove.append(vert)
+	            
+	            # Remove vertices that are outside the region
+	            for vert in vertices_to_remove:
+	                mesh.verts.remove(vert)
+	            
+	            # Update and free the mesh
+	            bmesh.update_edit_mesh(obj.data)
+	            bpy.ops.object.mode_set(mode='OBJECT')
+	
+	# Call the function to delete vertices outside the specified region
+	delete_vertices_outside_region(region_min, region_max)
+	
+	# Save the modified Blender file as trimmed_model.blend
+	save_path = os.path.join(os.path.dirname(r"{centered_path}"), "trimmed_model.blend")
+	bpy.ops.wm.save_as_mainfile(filepath=save_path)
+	"""
+	
+	        # Save the Blender script to a temporary file
+	        blender_trim_script_path = "./trim_model.py"
+	        with open(blender_trim_script_path, 'w') as script_file:
+	            script_file.write(blender_script)
+	
+	        # Call Blender with the script
+	        try:
+	            subprocess.run([blender_executable, "--background", "--python", blender_trim_script_path], check=True)
+	        except subprocess.CalledProcessError as e:
+	            print(f"Blender script execution failed: {e}")
+	            return
+	
+	        # Remove the temporary Blender script
+	        os.remove(blender_trim_script_path)
+	
+	        print(f"Blender file trimmed and saved as trimmed_model.blend")
+	
+	    else:
+	        print(f"Blender file not found: {centered_path}")
+
+Notes:
+* Sets object to 0 on the Z Axis; moves it slightly upwards so that it lays on the axes
+* Defines a cubed region around the origin (executed after the object/model is moved to the origin); set at 4, could potentially figure out how to adjust the size of region automatically
+* Deletes all content/objects outside of set region
+
+# Main File
+	import selenium_monument_screenshots as sel
+	import convert as CV
+	import HFendpoint as HF
+	import osm_client as osm
+	import blender_import as blender
+	import center_model as center
+	import trim_model as trim
+	
+	monument = "Colosseum"
+	folder_path = '.'
+	zip_file_name = '3Dmodel.zip'
+	glb_file_path = f"C:\\Users\\evanl\\model.glb"
+	blender_file_path = f"C:\\Users\\evanl\\Blender\\imported_model.blend"
+	centered_path = f"C:\\Users\\evanl\\Blender\\centered_model.blend"
+	
+	# Long, Lat, Relation ID from OSM
+	latitude, longitude, monument_id, message = osm.query_monument(monument)
+	
+	# Enter camera settings
+	altitude = 30.5
+	heading = 250.5
+	pitch = 35
+	tilt = 60
+	roll = 0
+	
+	sel.take_pictures(latitude, longitude, altitude, heading, pitch, tilt, roll)
+	
+	CV.convert_png_to_jpg(folder_path)
+	CV.add_jpgs_to_zip(folder_path, zip_file_name)
+	
+	HF.send_request(zip_file_name)
+	
+	blender.import_glb_to_blender(glb_file_path)
+	
+	center.centered_model(blender_file_path)
+	
+	trim.trim_model(centered_path)
+
+# Colosseum Test Case
+![Screenshot 2024-06-23 160045](https://github.com/LehEv12/edukai/assets/149429958/2fb3fd56-a07a-4b84-b00d-3b9652aa73bb)
+
+Notes:
+* Can fill almost the entire screen with the Colosseum itself when taking screenshots
+* Allows for accurate centering and a good finalized model with the Colosseum centered well
+* Overall a very good model with good trimming and centering in Blender
+
+# Castel Sant'Angelo Test Case
+![Screenshot 2024-06-21 140710](https://github.com/LehEv12/edukai/assets/149429958/39bbf977-377d-4fb8-8b03-1896425a70f1)
+
+Notes:
+* Not as easy to center, screenshots in GE don't allow for the monument to cover the full screen, would have to cut off the monument a little bit if you want to center like the Colosseum (not sure how accurate that model would be)
+* Still generates a good model, only issue is the monument is not fully centered (had to increase size of trim box to contain the full structure)
