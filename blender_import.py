@@ -41,7 +41,7 @@ bpy.ops.wm.save_as_mainfile(filepath="./imported_model.blend")
 
         # Move the saved Blender file to a specific location if desired
         saved_blend_file_path = "./imported_model.blend"
-        destination_path = "C:\\Users\\evanl\\Blender\\imported_model.blend"  # Update this path
+        destination_path = f"C:\\Users\\evanl\\OneDrive\\Desktop\\Edukai\\edukai\\Blender Model\\imported_model.blend"  # Update this path
         if os.path.exists(saved_blend_file_path):
             shutil.move(saved_blend_file_path, destination_path)
             print(f"Blender file saved to: {destination_path}")
